@@ -120,75 +120,62 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
+  // 1
   const queryParams = [];
+  const useAND = false;
+  // 2
   let queryString = `
-  SELECT properties.*, AVG(rating) AS average_rating
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
   FROM properties
   JOIN property_reviews ON properties.id = property_id
   `;
+  const filter = ``;
+  const groupBy = ``;
+  const orderBy = ``;
 
+  // 3
   if (options.city) {
     queryParams.push(`%${options.city}%`);
     queryString += `WHERE city LIKE $${queryParams.length} `;
+    useAND = true;
   }
 
   if (options.owner_id) {
-    if (queryString.includes('WHERE')) {
-      queryString += ` AND `;
-    } else {
-      queryString += ` WHERE `;
-    }
-
-    queryParams.push(Number(options.owner_id));
-    queryString += ` owner_id = $${queryParams.length} `;
+    queryParams.push(`%${options.owner_id}%`);
+    useAND ? queryString += ' AND ' : queryString += ' WHERE ';
+    queryString += `owner_id = $${queryParams.length} `;
+    useAND = true;
   }
 
   if (options.minimum_price_per_night) {
-    if (queryString.includes('WHERE')) {
-      queryString += ` AND `;
-    } else {
-      queryString += ` WHERE `;
-    }
+    queryParams.push(`%${options.minimum_price_per_night}%`);
+    useAND ? queryString += ' AND ' : queryString += ' WHERE ';
+    queryString += `cost_per_night > $${queryParams.length} `;
+    useAND = true;
 
-    queryParams.push(Number(options.minimum_price_per_night));
-    queryString += ` cost_per_night > $${queryParams.length} `;
   }
 
-  if (options.maximum_price_per_night) {
-    if (queryString.includes('WHERE')) {
-      queryString += ` AND `;
-    } else {
-      queryString += ` WHERE `;
-    }
-
-    queryParams.push(Number(options.maximum_price_per_night));
-    queryString += `cost_per_night < $${queryParams.length}`;
+  if (options.minimum_price_per_night) {
+    queryParams.push(`%${options.minimum_price_per_night}%`);
+    useAND ? queryString += ' AND ' : queryString += ' WHERE ';
+    queryString += `cost_per_night < $${queryParams.length} `;
+    useAND = true;
   }
 
-  queryString += `
-  GROUP BY properties.id
-  `;
-
-  if (options.minimum_rating) {
-    queryParams.push(Number(options.minimum_rating));
-    queryString += `HAVING AVG(rating) >= $${queryParams.length} `;
-  }
-
+  // 4
   queryParams.push(limit);
   queryString += `
+  GROUP BY properties.id
   ORDER BY cost_per_night
   LIMIT $${queryParams.length};
   `;
 
-  console.log('QUERY: ', queryString, queryParams);
+  // 5
+  console.log(queryString, queryParams);
+
+  // 6
   return pool.query(queryString, queryParams)
-    .then(res => {
-      return res.rows;
-    })
-    .catch(err => {
-      console.error('query error', err.stack);
-      return null;
-    });
+  .then(res => res.rows);
 };
 exports.getAllProperties = getAllProperties;
 
@@ -198,9 +185,17 @@ exports.getAllProperties = getAllProperties;
  * @return {Promise<{}>} A promise to the property.
  */
 const addProperty = function (property) {
-  const propertyId = Object.keys(properties).length + 1;
-  property.id = propertyId;
-  properties[propertyId] = property;
-  return Promise.resolve(property);
+
+  let query = `
+    INSERT INTO properties(owner_id, title, description, thumbnail_photo_url, cover_photo_url, cost_per_night, parking_spaces, number_of_bathrooms, number_of_bedrooms, country, street, city, province, post_code)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    RETURNING *;
+  `;
+
+  return pool.query(query, [property.owner_id, property.title, property.description, property.thumbnail_photo_url, property.cover_photo_url, property.cost_per_night, property.parking_spaces, property.number_of_bathrooms, property.number_of_bedrooms, property.country, property.street, property.city, property.province, property.post_code])
+  .then(res => {
+    res.rows[0];
+  })
+  .catch(err => console.log(err));
 };
 exports.addProperty = addProperty;
